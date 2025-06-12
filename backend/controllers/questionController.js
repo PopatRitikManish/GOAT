@@ -160,12 +160,45 @@ const getRec = async (req, res) => {
                return res.status(404).json({ error: "No questions found for the user." });
           }
 
-          // Create a prompt to send to the AI model
+          // Create a prompt to send to the AI model with enhanced context
+          // Group questions by topic for better context
+          const questionsByTopic = questions.reduce((acc, q) => {
+               acc[q.questionTag] = acc[q.questionTag] || [];
+               acc[q.questionTag].push(q);
+               return acc;
+          }, {});
+
+          // Analyze user's focus areas
+          const topicFrequency = Object.entries(questionsByTopic)
+               .map(([topic, qs]) => ({ topic, count: qs.length }))
+               .sort((a, b) => b.count - a.count);
+
+          const topFocusAreas = topicFrequency.slice(0, 3).map(t => t.topic);
+          const lessExploredAreas = Object.keys(questionsByTopic)
+               .filter(topic => !topFocusAreas.includes(topic))
+               .slice(0, 2);
+
           const prompt = `
-         Below are the questions with there names, links and topics:
-         ${questions.map((q, index) => `${index + 1}. ${q.name}: ${q.link}, ${q.questionTag}`).join('\n')}
-         I have practiced all this questions. Now suggested me exactly 3 questions different from this. Please only provide names of that questions. Each question should be separated by '||'.
-         `;
+          As an expert DSA problem recommender, analyze the following context:
+
+          User's solved questions by topic:
+          ${Object.entries(questionsByTopic)
+               .map(([topic, qs]) => `${topic}: ${qs.length} questions solved\n${qs.map(q => q.name).join(", ")}`)
+               .join("\n\n")}
+
+          Top focus areas: ${topFocusAreas.join(", ")}
+          Less explored areas: ${lessExploredAreas.join(", ")}
+
+          Based on this analysis:
+          1. Suggest exactly 3 high-quality DSA questions that:
+             - Build upon concepts from their top focus areas
+             - Gradually introduce elements from less explored topics
+             - Are not too similar to questions they've already solved
+             - Provide a natural progression in difficulty
+
+          Return only the names of the 3 questions, separated by '||'.
+          The questions should be challenging but approachable given their practice history.
+          `;
 
           console.log(prompt);
 
